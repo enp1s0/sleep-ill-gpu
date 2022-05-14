@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <cuda.h>
+#include <nvml.h>
 #include <unistd.h>
 
 int main(int argc, char** argv) {
@@ -12,15 +13,26 @@ int main(int argc, char** argv) {
 	cudaDeviceProp prop;
 	cudaGetDeviceProperties(&prop, 0);
 
-	const auto sleep_duration = std::stoi(argv[1]);
-	const auto min_clock = std::stoi(argv[2]);
-	const auto max_clock = std::stoi(argv[3]);
+	const unsigned sleep_duration = std::stoi(argv[1]);
+	const unsigned min_clock = std::stoi(argv[2]);
+	const unsigned max_clock = std::stoi(argv[3]);
 
-	const auto freq_in_MHz = prop.clockRate / 1000;
+	nvmlDevice_t device;
+
+	nvmlInit();
+	nvmlDeviceGetHandleByIndex(0, &device);
+
+	unsigned freq_in_MHz;
+	const auto res = nvmlDeviceGetClock(device, NVML_CLOCK_SM, NVML_CLOCK_ID_CURRENT, &freq_in_MHz);
+	if (res != NVML_SUCCESS) {
+		std::printf("Error at nvmlDeviceGetClock (error code = %u)\n",
+				static_cast<unsigned>(res));
+		return 1;
+	}
 	const auto ill_state = (freq_in_MHz < min_clock) || (freq_in_MHz > max_clock);
 
 
-	std::printf("[%s] SM Frequency : %d MHz (state=%s)\n",
+	std::printf("[%s] SM Frequency : %u MHz (state=%s)\n",
 			prop.name,
 			freq_in_MHz,
 			ill_state ? "ill" : "good"
@@ -28,7 +40,7 @@ int main(int argc, char** argv) {
 	std::fflush(stdout);
 
 	if (ill_state) {
-		std::printf("Sleep %d sec\n", sleep_duration);
+		std::printf("Sleep %u sec\n", sleep_duration);
 		std::fflush(stdout);
 		sleep(sleep_duration);
 	}
